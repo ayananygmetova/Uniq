@@ -1,0 +1,34 @@
+before_script:
+    - echo "$SSH_KEY" | tr -d '\r' > key.pub
+    - chmod 400 key.pub
+
+test:
+    stage: test
+    script:
+        - ssh -o "StrictHostKeyChecking no" -i key.pub $DEV_CONNECTION "source $PYTHON_ENV_PATH && cd $PROJECT_DIR && export DJANGO_CONFIGURATION=Test && git pull && pip install -r requirements.txt && ./manage.py test --noinput && flake8"
+    tags:
+        - shell
+
+dev_deploy:
+    stage: deploy
+    script:
+        - ssh -o "StrictHostKeyChecking no" -i key.pub $DEV_CONNECTION "cd $PROJECT_DIR && git pull"
+        - ssh -o "StrictHostKeyChecking no" -i  key.pub $DEV_CONNECTION "source $PYTHON_ENV_PATH && cd $PROJECT_DIR && export DJANGO_CONFIGURATION=Dev && ./manage.py migrate && ./manage.py collectstatic --no-input"
+        - ssh -o "StrictHostKeyChecking no" -i key.pub $DEV_CONNECTION "supervisorctl restart $PROJECT_NAME"
+    when: on_success
+    only:
+        - master
+    tags:
+        - shell
+
+prod_deploy:
+  stage: deploy
+  script:
+    - ssh -o "StrictHostKeyChecking no" -i key.pub $PROD_CONNECTION "cd $PROJECT_DIR && git pull"
+    - ssh -o "StrictHostKeyChecking no" -i key.pub $PROD_CONNECTION "source $PYTHON_ENV_PATH && cd $PROJECT_DIR && export DJANGO_CONFIGURATION=Prod && ./manage.py migrate && ./manage.py collectstatic --no-input"
+    - ssh -o "StrictHostKeyChecking no" -i key.pub $PROD_CONNECTION "supervisorctl restart $PROJECT_NAME"
+  when: manual
+  only:
+    - master
+  tags:
+    - shell
